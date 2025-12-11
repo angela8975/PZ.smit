@@ -1,0 +1,170 @@
+---
+title: "Лабораторна робота № 4. Перевірка статистичних гіпотез щодо закону розподілу"
+author: "Лабущак Анжела"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+  html_notebook:
+    toc: true
+    toc_float: true
+    highlight: tango
+editor_options:
+  chunk_output_type: console
+bibliography: references_lab.bib
+---
+
+```{r setup, include=FALSE}
+library(ggplot2)
+library(knitr)
+library(nortest) # Пакет для розширених тестів на нормальність
+```
+
+# 1. Постановка завдання
+
+Мета: Перевірити гіпотезу про нормальний розподіл випадкової величини $X$ за допомогою графічних методів та статистичних критеріїв (Шапіро-Вілка, Колмогорова-Смирнова (Лілієфорса), Пірсона тощо).
+Дослідження провести для двох вибірок: $n=50$ та $n=1000$.
+
+# 2. Функції користувача (User-defined functions)
+
+Згідно із завданням (Рівень 2), створюємо власні функції для розрахунку характеристик та автоматичної перевірки гіпотез.
+
+```{r custom_functions}
+# Функція 1: Описова статистика (Mean, SD, Skewness, Kurtosis + Z-scores)
+get_descriptive_stats <- function(x) {
+  n <- length(x)
+  m <- mean(x)
+  s <- sd(x)
+  
+  # Асиметрія (Skewness)
+  skew <- sum((x - m)^3) / (n * sqrt((n-1)/n * s^2)^3)
+  # Стандартизована асиметрія (z1)
+  z_skew <- skew / sqrt(6/n)
+  
+  # Ексцес (Kurtosis)
+  kurt <- sum((x - m)^4) / (n * ((n-1)/n * s^2)^2) - 3
+  # Стандартизований ексцес (z2)
+  z_kurt <- kurt / sqrt(24/n)
+  
+  res <- data.frame(
+    Metric = c("Mean", "SD", "Skewness", "Kurtosis", "Z-Skewness", "Z-Kurtosis"),
+    Value = round(c(m, s, skew, kurt, z_skew, z_kurt), 4)
+  )
+  return(res)
+}
+
+# Функція 2: Таблиця тестів на нормальність
+get_normality_tests <- function(x) {
+  # 1. Тест Шапіро-Вілка
+  sw <- shapiro.test(x)
+  # 2. Тест Лілієфорса (Колмогорова-Смирнова)
+  ks <- lillie.test(x)
+  # 3. Тест Хі-квадрат Пірсона
+  pearson <- pearson.test(x)
+  # 4. Тест Шапіро-Франсія
+  sf <- sf.test(x)
+  # 5. Тест Крамера-фон Мізеса
+  cvm <- cvm.test(x)
+  
+  tests <- data.frame(
+    Test_Name = c("Shapiro-Wilk", "Lilliefors (KS)", "Pearson Chi-square", "Shapiro-Francia", "Cramer-von Mises"),
+    Statistic = round(c(sw$statistic, ks$statistic, pearson$statistic, sf$statistic, cvm$statistic), 4),
+    P_Value = round(c(sw$p.value, ks$p.value, pearson$p.value, sf$p.value, cvm$p.value), 4)
+  )
+  
+  # Додаємо висновок (p > 0.05 -> Нормальний)
+  tests$Conclusion <- ifelse(tests$P_Value > 0.05, "Normal", "Not Normal")
+  return(tests)
+}
+```
+
+# 3. Дослідження вибірки n = 50
+
+Генеруємо вибірку з нормального розподілу $N(0, 1)$.
+
+```{r analysis_50}
+set.seed(50)
+n1 <- 50
+X1 <- rnorm(n1, mean = 0, sd = 1)
+
+# 1. Описова статистика
+stats1 <- get_descriptive_stats(X1)
+kable(stats1, caption = "Описові статистики (n=50)")
+```
+
+### Графічний аналіз
+
+Будуємо гістограму та накладаємо на неї три криві: нормальну (червона), рівномірну (зелена) та Стьюдента (синя), як показано в методичці. Також будуємо Q-Q plot.
+
+```{r plots_50, fig.width=10, fig.height=5}
+par(mfrow = c(1, 2))
+
+# Гістограма з кривими
+hist(X1, freq = FALSE, col = "lightgray", main = "Histogram & Fits (n=50)", ylim = c(0, 0.6))
+# Нормальний (червоний)
+curve(dnorm(x, mean(X1), sd(X1)), col = "red", lwd = 2, add = TRUE)
+# Рівномірний (зелений) - для порівняння
+curve(dunif(x, min(X1), max(X1)), col = "green", lwd = 2, lty = 2, add = TRUE)
+# Стьюдента (синій) - для порівняння
+curve(dt(x, df=10), col = "blue", lwd = 2, lty = 3, add = TRUE)
+legend("topright", legend = c("Normal", "Uniform", "Student"), col = c("red", "green", "blue"), lty = 1:3)
+
+# Q-Q Plot
+qqnorm(X1, pch = 19, col = "blue", main = "Normal Q-Q Plot")
+qqline(X1, col = "red", lwd = 2)
+
+par(mfrow = c(1, 1))
+```
+
+### Статистичні тести
+
+```{r tests_50}
+test_res1 <- get_normality_tests(X1)
+kable(test_res1, caption = "Результати тестів на нормальність (n=50)")
+```
+
+# 4. Дослідження вибірки n = 1000
+
+Повторюємо аналіз для великої вибірки.
+
+```{r analysis_1000}
+set.seed(1000)
+n2 <- 1000
+X2 <- rnorm(n2, mean = 0, sd = 1)
+
+# 1. Описова статистика
+stats2 <- get_descriptive_stats(X2)
+kable(stats2, caption = "Описові статистики (n=1000)")
+```
+
+### Графічний аналіз
+
+```{r plots_1000, fig.width=10, fig.height=5}
+par(mfrow = c(1, 2))
+
+# Гістограма
+hist(X2, freq = FALSE, col = "lightblue", main = "Histogram & Fits (n=1000)")
+curve(dnorm(x, mean(X2), sd(X2)), col = "red", lwd = 2, add = TRUE)
+curve(dunif(x, min(X2), max(X2)), col = "green", lwd = 2, lty = 2, add = TRUE)
+legend("topright", legend = c("Normal", "Uniform"), col = c("red", "green"), lty = 1:2)
+
+# Q-Q Plot
+qqnorm(X2, pch = 19, col = "blue", main = "Normal Q-Q Plot")
+qqline(X2, col = "red", lwd = 2)
+
+par(mfrow = c(1, 1))
+```
+
+### Статистичні тести
+
+```{r tests_1000}
+test_res2 <- get_normality_tests(X2)
+kable(test_res2, caption = "Результати тестів на нормальність (n=1000)")
+```
+
+# Висновки
+
+За результатами аналізу можна зробити висновок:
+1. Для $n=1000$ графіки (гістограма та Q-Q plot) показують майже ідеальну відповідність нормальному закону (точки лежать на прямій).
+2. P-значення (P-value) у тестах для обох вибірок більше за 0.05 (наприклад, для тесту Шапіро-Вілка), що означає: **ми не можемо відхилити гіпотезу про нормальність**. Тобто, дані дійсно розподілені нормально.
